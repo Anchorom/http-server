@@ -1,3 +1,4 @@
+pub use clap::Parser;
 use std::{
     error::Error,
     fs,
@@ -126,4 +127,23 @@ pub fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
     stream.write_all(response.as_bytes())?;
     stream.flush()?;
     Ok(())
+}
+
+#[derive(Parser, Debug)]
+pub struct Args {
+    /// IP
+    #[arg(short, long)]
+    pub ip: String,
+
+    /// 端口
+    #[arg(short, long)]
+    pub port: String,
+
+    ///线程数
+    #[arg(short, long)]
+    pub threads: u8,
+
+    ///代理
+    #[arg(long, default_value_t = String::from(""))]
+    pub proxy: String,
 }

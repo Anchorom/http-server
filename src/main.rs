@@ -1,13 +1,15 @@
 use http_server::*;
 use std::{net::TcpListener, process::exit};
-
 fn main() {
-    let listener = TcpListener::bind("127.0.0.1:8080").unwrap_or_else(|err| {
-        eprintln!("{err}");
-        exit(1)
-    });
+    let args = Args::parse();
 
-    let pool = ThreadPool::new(8);
+    let listener =
+        TcpListener::bind((args.ip + ":" + args.port.as_str()).as_str()).unwrap_or_else(|err| {
+            eprintln!("{err}");
+            exit(1)
+        });
+
+    let pool = ThreadPool::new(args.threads as usize);
 
     for stream in listener.incoming() {
         let stream = stream.unwrap_or_else(|err| {
