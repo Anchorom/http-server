@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     fs,
     io::prelude::*,
     net::TcpStream,
@@ -40,13 +41,14 @@ impl ThreadPool {
         }
     }
 
-    pub fn execute<F>(&self, f: F)
+    pub fn execute<F>(&self, f: F) -> Result<(), Box<dyn Error>>
     where
         F: FnOnce() + Send + 'static,
     {
         let job = Box::new(f);
 
-        self.sender.as_ref().unwrap().send(job).unwrap();
+        self.sender.as_ref().unwrap().send(job)?;
+        Ok(())
     }
 }
 
@@ -94,27 +96,34 @@ impl Worker {
     }
 }
 
-pub fn handle_connection(mut stream: TcpStream) {
+pub fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+    stream.read(&mut buffer)?;
 
     let get = b"GET / HTTP/1.1\r\n";
+    let get_index = b"GET /index.html HTTP/1.1\r\n";
+    let get_501 = b"GET /501.html HTTP/1.1\r\n";
 
     let (status_line, filename) = if buffer.starts_with(get) {
-        ("HTTP/1.1 200 OK", "hello.html")
+        ("HTTP/1.1 200 OK", "index.html")
+    } else if buffer.starts_with(get_index) {
+        ("HTTP/1.1 200 OK", "index.html")
+    } else if buffer.starts_with(get_501) {
+        ("HTTP/1.1 501 OK", "501.html")
     } else {
         ("HTTP/1.1 404 NOT FOUND", "404.html")
     };
 
-    let contents = fs::read_to_string(filename).unwrap();
+    let contents = fs::read_to_string(filename)?;
 
     let response = format!(
-        "{}\r\nContent-Length: {}\r\n\r\n{}",
+        "{}\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
         status_line,
         contents.len(),
         contents
     );
 
-    stream.write_all(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
+    stream.write_all(response.as_bytes())?;
+    stream.flush()?;
+    Ok(())
 }
