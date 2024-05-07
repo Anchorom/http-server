@@ -1,7 +1,10 @@
 [package]
-name = "http_server"
+name = "http-server"
 version = "0.1.0"
+readme = "README.md"
+license = "MIT"
 edition = "2021"
+repository = "https://github.com/Anchorom/http-server"
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
