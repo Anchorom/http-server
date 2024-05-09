@@ -1,4 +1,5 @@
 pub use clap::Parser;
+use regex::Regex;
 use std::{
     error::Error,
     fs,
@@ -120,25 +121,58 @@ pub fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
     let mut buffer = [0; 1024];
     stream.read(&mut buffer)?;
 
-    let get = b"GET / HTTP/1.1\r\n";
-    let get_index = b"GET /index.html HTTP/1.1\r\n";
-    let get_501 = b"GET /501.html HTTP/1.1\r\n";
+    let re = Regex::new("id=[0-9]+&name=[a-zA-Z0-9]+")?;
 
-    let (status_line, filename) = if buffer.starts_with(get) {
-        ("HTTP/1.1 200 OK", "index.html")
-    } else if buffer.starts_with(get_index) {
-        ("HTTP/1.1 200 OK", "index.html")
-    } else if buffer.starts_with(get_501) {
-        ("HTTP/1.1 501 OK", "501.html")
-    } else {
-        ("HTTP/1.1 404 NOT FOUND", "404.html")
+    let (method, path, _) = parse_request(&buffer)?;
+
+    let (status_line, content_type, contents) = match (method.as_str(), path.as_str()) {
+        ("GET", "/") | ("GET", "/index.html") => {
+            let contents = fs::read_to_string("static/index.html")?;
+            ("HTTP/1.1 200 OK", "text/html", contents)
+        }
+        ("GET", "/501.html") => {
+            let contents = fs::read_to_string("static/501.html")?;
+            ("HTTP/1.1 501 OK", "text/html", contents)
+        }
+        ("GET", "/api/check") => {
+            let contents = fs::read_to_string("data/data.txt")?;
+            ("HTTP/1.1 200 OK", "text/html", contents)
+        }
+        ("POST", "/api/echo") => {
+            let body_string = String::from_utf8_lossy(&buffer).to_string();
+            let body: Vec<&str> = body_string.split("\r\n\r\n").collect();
+
+            let data = if let Some(body) = body.get(1) {
+                *body
+            } else {
+                return Err("No body found in the request".into());
+            };
+            match re.is_match(data) {
+                true => {
+                    let contents = format!("{}", "id=1&name=Foo");
+                    (
+                        "HTTP/1.1 200 OK",
+                        "application/x-www-form-urlencoded",
+                        contents,
+                    )
+                }
+                false => (
+                    "HTTP/1.1 404 OK",
+                    "text/plain",
+                    fs::read_to_string("data/error.txt")?,
+                ),
+            }
+        }
+        _ => {
+            let contents = fs::read_to_string("static/404.html")?;
+            ("HTTP/1.1 404 NOT FOUND", "text/html", contents)
+        }
     };
 
-    let contents = fs::read_to_string(filename)?;
-
     let response = format!(
-        "{}\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
+        "{}\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n{}",
         status_line,
+        content_type,
         contents.len(),
         contents
     );
@@ -146,4 +180,18 @@ pub fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
     stream.write_all(response.as_bytes())?;
     stream.flush()?;
     Ok(())
+}
+
+fn parse_request(buffer: &[u8]) -> Result<(String, String, String), Box<dyn Error>> {
+    let request = String::from_utf8_lossy(buffer);
+    let mut lines = request.lines();
+
+    let first_line = lines.next().ok_or("Empty request")?;
+    let mut parts = first_line.split_whitespace();
+
+    let method = parts.next().ok_or("Invalid request")?.to_string();
+    let path = parts.next().ok_or("Invalid request")?.to_string();
+    let protocol = parts.next().ok_or("Invalid request")?.to_string();
+
+    Ok((method, path, protocol))
 }

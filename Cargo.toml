@@ -8,3 +8,4 @@ repository = "https://github.com/Anchorom/http-server"
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
+regex = "1.5"
